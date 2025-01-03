@@ -1,12 +1,11 @@
 import {UIGestures} from "./ui_gestures"
 import {Signal, Signal0} from "./signaling"
-import type {Key, KeyCombination} from "./dom"
+import type {AnyKey, Key, KeyCombination} from "./dom"
 import {offset_bbox} from "./dom"
 import * as events from "./bokeh_events"
 import type {ViewStorage} from "./build_views"
 import {getDeltaY} from "./util/wheel"
 import {reversed, is_empty, sort_by} from "./util/array"
-import {flatten} from "./util/iterator"
 import {isObject, isBoolean} from "./util/types"
 import type {PlotView} from "../models/plots/plot"
 import type {Tool, ToolView, KeyBinding} from "../models/tools/tool"
@@ -14,7 +13,7 @@ import type {ToolLike} from "../models/tools/tool_proxy"
 import {ToolProxy} from "../models/tools/tool_proxy"
 import type {RendererView} from "../models/renderers/renderer"
 import type {CanvasView} from "../models/canvas/canvas"
-//import {assert} from "./util/assert"
+import {execute, execute_sync} from "./util/callbacks"
 
 import type {TapEvent, PanEvent, PinchEvent, RotateEvent, MoveEvent, KeyModifiers} from "./ui_gestures"
 export type {TapEvent, PanEvent, PinchEvent, RotateEvent, MoveEvent, KeyModifiers} from "./ui_gestures"
@@ -101,7 +100,7 @@ export type ScrollEvent = {
 export type UIEvent = GestureEvent | TapEvent | MoveEvent | ScrollEvent
 
 type KeyState = {
-  key: Key
+  key: AnyKey
   modifiers: KeyModifiers
 }
 
@@ -204,7 +203,11 @@ export class UIEventBus {
   }
 
   protected readonly _tools: ViewStorage<ToolLike<Tool>> = new Map()
-  protected readonly _key_bindings: Map<ToolView, readonly KeyBinding[]> = new Map()
+  protected readonly _key_bindings: KeyBinding[] = []
+
+  add_key_bindings(bindings: KeyBinding[]): void {
+    this._key_bindings.push(...bindings)
+  }
 
   register_tool(tool_view: ToolView): void {
     const {model: tool} = tool_view
@@ -213,7 +216,7 @@ export class UIEventBus {
       throw new Error(`${tool} already registered`)
     } else {
       this._tools.set(tool, tool_view)
-      this._key_bindings.set(tool_view, tool_view.key_bindings())
+      this.add_key_bindings(tool_view.key_bindings())
     }
   }
 
@@ -816,6 +819,7 @@ export class UIEventBus {
 
   on_key_up(event: KeyboardEvent): void {
     const ev = this._key_event(event)
+    const target = this.canvas_view.model
 
     // NOTE: keyup event triggered unconditionally
     this.trigger(this.keyup, ev)
@@ -827,7 +831,7 @@ export class UIEventBus {
     }
     */
 
-    const is_upper_like = (key: Key): boolean => {
+    const is_upper_like = (key: AnyKey): boolean => {
       if (key.length != 1) {
         return false
       }
@@ -922,11 +926,9 @@ export class UIEventBus {
     }
 
     const find_cmd = (cmd: string): KeyBinding | null => {
-      for (const [_tool_view, bindings] of this._key_bindings.entries()) {
-        for (const binding of bindings) {
-          if (binding.cmd == cmd) {
-            return binding
-          }
+      for (const binding of this._key_bindings) {
+        if (binding.cmd == cmd) {
+          return binding
         }
       }
       return null
@@ -948,8 +950,8 @@ export class UIEventBus {
       if (ev.key == "Enter") {
         const binding = find_cmd(this._key_buffer)
         if (binding != null) {
-          if (binding.if?.() !== false) {
-            void binding.action()
+          if (binding.when == null || execute_sync(binding.when, target) !== false) {
+            void execute(binding.action, target)
           }
         } else {
           console.warn(`${this._cmd_start}${this._key_buffer} command not found`)
@@ -996,7 +998,7 @@ export class UIEventBus {
       if (this._key_state == "seq") {
         return this._collected_bindings
       } else {
-        return flatten<KeyBinding>(this._key_bindings.values())
+        return this._key_bindings
       }
     })()
 
@@ -1010,18 +1012,22 @@ export class UIEventBus {
       }
       const key = binding.keys[i]
       const normalized = normalize(key)
-      if (matches(normalized, ev) && binding.if?.() !== false) {
+      if (matches(normalized, ev)) {
         collected.push(binding)
       }
     }
 
     this._collected_bindings = collected
 
-    if (collected.length == 0) {
-      console.log(`unknown key sequence: ${this._key_buffer}`)
+    const reset_state = (): void => {
       this._key_state = "none"
       this._key_buffer = ""
       this._seq_index = 0
+    }
+
+    if (collected.length == 0) {
+      console.log(`unknown key sequence: ${this._key_buffer}`)
+      reset_state()
     } else {
       const longer = collected.filter((binding) => binding.keys.length-1 > i)
       if (longer.length != 0) {
@@ -1030,13 +1036,13 @@ export class UIEventBus {
       } else {
         for (const binding of prioritized(collected)) {
           if (binding.keys.length-1 == i) {
-            void binding.action()
-            break
+            if (binding.when == null || execute_sync(binding.when, target) !== false) {
+              void execute(binding.action, target)
+              break
+            }
           }
         }
-        this._key_state = "none"
-        this._key_buffer = ""
-        this._seq_index = 0
+        reset_state()
       }
     }
   }

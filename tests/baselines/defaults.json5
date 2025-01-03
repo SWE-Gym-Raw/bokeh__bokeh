@@ -5350,6 +5350,7 @@
     reset_policy: "standard",
     hold_render: false,
     attribution: [],
+    key_bindings: [],
   },
   DataRange: {
     __extends__: "NumericalRange",
@@ -6779,6 +6780,19 @@
   },
   MenuItem: {
     __extends__: "Model",
+  },
+  KeyBinding: {
+    __extends__: "Model",
+    key: {
+      type: "symbol",
+      name: "unset",
+    },
+    when: null,
+    action: {
+      type: "symbol",
+      name: "unset",
+    },
+    priority: 0,
   },
   Panel: {
     __extends__: "Pane",
