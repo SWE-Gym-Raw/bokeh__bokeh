@@ -131,7 +131,11 @@ export abstract class ToolView extends View {
   _keyup?(e: KeyEvent): void | boolean
 
   key_bindings(): KeyBinding[] {
-    return []
+    const bindings: KeyBinding[] = []
+    if (this.model.toggle_key != null) {
+      bindings.push({keys: ["a", this.model.toggle_key], action: () => { this.model.active = !this.model.active }})
+    }
+    return bindings
   }
 }
 
@@ -205,6 +209,11 @@ export abstract class Tool extends Model {
   get menu(): MenuItem[] | null {
     return null
   }
+
+  /**
+   * Key combination for toggling the tool.
+   */
+  readonly toggle_key: KeyCombination | null = null
 
   supports_auto(): boolean {
     return false
