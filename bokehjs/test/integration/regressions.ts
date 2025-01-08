@@ -881,19 +881,32 @@ describe("Bug", () => {
   })
 
   describe("in issue #10498", () => {
-    it("prevents GridBox from rebuilding when rows or cols properties are modified", async () => {
-      const p1 = fig([300, 300])
-      const p2 = fig([300, 300])
-      p1.scatter({x: [0, 1], y: [0, 1], color: "red"})
-      p2.scatter({x: [1, 0], y: [0, 1], color: "green"})
-      const box = new GridBox({
-        children: [[p1, 0, 0], [p2, 0, 1]],
-        cols: ["300px", "300px"],
-        sizing_mode: "fixed",
-      })
-      const {view} = await display(box, [600, 300])
-      box.cols = ["100px", "500px"]
-      await view.ready
+    const params: Array<"cols" | "rows"> = ["cols", "rows"]
+    params.forEach(uses => {
+      it(
+        uses === "cols"
+          ? "prevents GridBox from rebuilding in x direction when cols are modified"
+          : "prevents GridBox from rebuilding in y direction when rows are modified",
+        async () => {
+          const p1 = fig([300, 300])
+          const p2 = fig([300, 300])
+          p1.scatter({x: [0, 1], y: [0, 1], color: "red"})
+          p2.scatter({x: [1, 0], y: [0, 1], color: "green"})
+          const box = new GridBox({
+            children: [
+              [p1, 0, 0],
+              uses === "cols" ?
+                [p2, 0, 1] :
+                [p2, 1, 0],
+            ],
+            [uses]: ["300px", "300px"],
+            sizing_mode: "fixed",
+          })
+          const {view} = await display(box, uses === "cols" ? [600, 300] : [300, 600])
+          box[uses] = ["100px", "500px"]
+          await view.ready
+        },
+      )
     })
   })
 
