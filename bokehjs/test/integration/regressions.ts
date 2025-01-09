@@ -901,11 +901,11 @@ describe("Bug", () => {
       await view.ready
     }
 
-    it("prevents GridBox from rebuilding in x direction when cols are modified", async () => {
+    it("prevents GridBox from rebuilding in the x direction when cols are modified", async () => {
       await plot("cols")
     })
 
-    it("prevents GridBox from rebuilding in the y direction rows are modified", async () => {
+    it("prevents GridBox from rebuilding in the y direction when rows are modified", async () => {
       await plot("rows")
     })
   })
